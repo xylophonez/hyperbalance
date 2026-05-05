@@ -32,6 +32,19 @@
     "permaweb"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xylophonez/hyperbalance.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xylophonez/hyperbalance/issues"
+  },
+  "homepage": "https://github.com/xylophonez/hyperbalance#readme",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "sideEffects": false,
   "devDependencies": {
     "typescript": "^5.7.0"
   },

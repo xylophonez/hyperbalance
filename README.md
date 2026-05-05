@@ -25,11 +25,10 @@ Client tools can then:
 
 ## Install
 
-This repo is local-first for now:
+Install from npm:
 
 ```sh
-pnpm install
-pnpm build
+npm install hyperbalance
 ```
 
 ## Basic Usage
