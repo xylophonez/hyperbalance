@@ -1,11 +1,18 @@
 import { AoTokenTransferAdapter } from "hyperbalance/adapters/ao"
-import { HyperbalanceClient } from "hyperbalance"
+import {
+  DEFAULT_AO_TOKEN_ID,
+  HYPERBEAM_DEFAULT_LEDGER_ID,
+  HyperbalanceClient,
+  discoverHyperbeamAoBundlerProfile,
+} from "hyperbalance"
 
 const client = new HyperbalanceClient({
   nodeUrl: "https://hyperbeam.example.com",
 })
 
-const profile = await client.discover()
+const profile = await discoverHyperbeamAoBundlerProfile({
+  nodeUrl: "https://hyperbeam.example.com",
+})
 
 const transferAdapter = new AoTokenTransferAdapter({
   async inferSender() {
@@ -22,11 +29,10 @@ const transferAdapter = new AoTokenTransferAdapter({
 })
 
 await client.ensureCredit({
-  ledgerId: "local-ao",
+  ledgerId: HYPERBEAM_DEFAULT_LEDGER_ID,
   minimumBalance: 1_000_000n,
   profile,
   recipient: "payer-wallet-address",
-  tokenId: "ao-mainnet",
+  tokenId: DEFAULT_AO_TOKEN_ID,
   transferAdapter,
 })
-

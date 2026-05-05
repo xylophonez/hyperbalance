@@ -1,11 +1,7 @@
 import { MissingDiscoveryError } from "./errors.js"
 import type { DiscoveryOptions, FetchLike, HyperbalanceProfile } from "./types.js"
 
-export const DEFAULT_DISCOVERY_PATHS = [
-  "/.well-known/hyperbalance",
-  "/~payments@1.0/info",
-  "/~hyperbalance@1.0/info",
-] as const
+export const DEFAULT_DISCOVERY_PATHS = ["/.well-known/hyperbalance"] as const
 
 export function normalizeNodeUrl(nodeUrl: string): string {
   return nodeUrl.replace(/\/+$/, "")
@@ -51,4 +47,3 @@ function validateProfile(profile: HyperbalanceProfile): void {
     throw new Error("Invalid hyperbalance profile: tokens must be an array")
   }
 }
-
