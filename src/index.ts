@@ -1,5 +1,6 @@
 export { HyperbalanceClient } from "./client.js"
 export { selectFundingTarget } from "./client.js"
+export { AoTokenTransferAdapter, buildAoTransferTags, waitForAoAssignmentSlot } from "./adapters/ao.js"
 export {
   DEFAULT_DISCOVERY_PATHS,
   discoverPaymentProfile,
