@@ -1,0 +1,41 @@
+{
+  "name": "hyperbalance",
+  "version": "0.1.0",
+  "description": "Generic client helpers for discovering, funding, and checking HyperBEAM-style local ledgers.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./adapters/ao": {
+      "types": "./dist/adapters/ao.d.ts",
+      "import": "./dist/adapters/ao.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "hyperbeam",
+    "ao",
+    "ledger",
+    "payments",
+    "permaweb"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
