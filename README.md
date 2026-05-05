@@ -25,18 +25,20 @@ pnpm build
 ## Basic Usage
 
 ```ts
-import { HyperbalanceClient } from "hyperbalance"
+import { HyperbalanceClient, discoverHyperbeamAoBundlerProfile } from "hyperbalance"
 
 const client = new HyperbalanceClient({
   nodeUrl: "https://hyperbeam.example.com",
 })
 
-const profile = await client.discover()
+const profile = await discoverHyperbeamAoBundlerProfile({
+  nodeUrl: "https://hyperbeam.example.com",
+})
 const address = "payer-wallet-address"
 
 const balance = await client.getBalance({
   profile,
-  ledgerId: "local-ao",
+  ledgerId: "default",
   address,
 })
 
@@ -69,7 +71,18 @@ await client.ensureCredit({
 
 ## Discovery
 
-A node should expose one of these paths:
+For the standard AO-paid HyperBEAM bundler flow, no new payment metadata device
+is required. `discoverHyperbeamAoBundlerProfile` builds a profile from existing
+HyperBEAM routes:
+
+```text
+/~meta@1.0/info/address
+/~metering@1.0/quote?resource=arweave-bytes&amount={bytes}
+/ledger~node-process@1.0/now/balance/{address}
+/~ao-payment@1.0/ingest
+```
+
+For non-standard ledgers or tokens, a node can expose one of these paths:
 
 ```text
 /.well-known/hyperbalance
