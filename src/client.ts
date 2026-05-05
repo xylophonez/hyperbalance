@@ -1,7 +1,7 @@
 import { discoverPaymentProfile, normalizeNodeUrl } from "./discovery.js"
 import { PaymentRequiredError } from "./errors.js"
 import { getLedger, getToken } from "./lookup.js"
-import { parseBalanceResponse } from "./parse.js"
+import { parseBalanceResponse, parseQuoteResponse } from "./parse.js"
 import { applyTemplate, applyTemplateMap } from "./templates.js"
 import type {
   Balance,
@@ -15,6 +15,9 @@ import type {
   HyperbalanceClientOptions,
   HyperbalanceProfile,
   ImportDepositRequest,
+  Quote,
+  QuoteAutoRequest,
+  QuoteRequest,
   TokenTransferRequest,
 } from "./types.js"
 
@@ -144,6 +147,48 @@ export class HyperbalanceClient {
       tokenId: token.id,
       transferAdapter: request.transferAdapter,
     })
+  }
+
+  async quote(request: QuoteRequest): Promise<Quote> {
+    const descriptor = request.profile.pricing?.find(
+      (candidate) => candidate.action === request.action,
+    )
+    if (!descriptor?.quotePath) {
+      throw new Error(`No quote path advertised for action: ${request.action}`)
+    }
+
+    const values = request.params ?? {}
+    const url = new URL(this.absoluteUrl(applyTemplate(descriptor.quotePath, values)))
+    for (const [key, value] of Object.entries(applyTemplateMap(descriptor.query, values))) {
+      url.searchParams.set(key, value)
+    }
+
+    const bodyValues = applyTemplateMap(descriptor.body, values)
+    const hasBody = Object.keys(bodyValues).length > 0
+    const init: RequestInit = {
+      headers: { accept: "application/json, text/plain" },
+      method: descriptor.method ?? (hasBody ? "POST" : "GET"),
+    }
+    if (hasBody) {
+      init.body = JSON.stringify(bodyValues)
+      init.headers = { ...init.headers, "content-type": "application/json" }
+    }
+
+    const response = await this.fetch(url, init)
+    if (!response.ok) {
+      throw new Error(`Quote request failed: ${response.status} ${response.statusText}`)
+    }
+
+    return parseQuoteResponse(response)
+  }
+
+  async quoteAuto(request: QuoteAutoRequest): Promise<Quote> {
+    const quoteRequest: QuoteRequest = {
+      action: request.action,
+      profile: request.profile ?? (await this.discover()),
+    }
+    if (request.params !== undefined) quoteRequest.params = request.params
+    return this.quote(quoteRequest)
   }
 
   async importDeposit(request: ImportDepositRequest): Promise<unknown> {

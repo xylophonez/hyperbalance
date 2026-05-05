@@ -41,6 +41,14 @@ const balance = await client.getBalance({
 })
 
 console.log(balance.value)
+
+const quote = await client.quote({
+  profile,
+  action: "hyperbeam-upload",
+  params: { bytes: 1234 },
+})
+
+console.log(quote.amount)
 ```
 
 ## Funding
@@ -117,6 +125,12 @@ Example response:
         }
       }
     }
+  ],
+  "pricing": [
+    {
+      "action": "hyperbeam-upload",
+      "quotePath": "/~hyperbalance@1.0/quote/hyperbeam-upload?bytes={bytes}"
+    }
   ]
 }
 ```
@@ -148,4 +162,3 @@ The library should not hardcode:
 - deposit address equals operator address,
 - upload byte price,
 - AO as the only supported token.
-

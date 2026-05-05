@@ -28,6 +28,8 @@ export type {
   PaymentNodeDescriptor,
   PricedAction,
   Quote,
+  QuoteAutoRequest,
+  QuoteRequest,
   TokenDescriptor,
   TokenTransferAdapter,
   TokenTransferRequest,

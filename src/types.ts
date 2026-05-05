@@ -56,6 +56,9 @@ export interface PaymentImportDescriptor {
 
 export interface PricingDescriptor {
   action: string
+  method?: "GET" | "POST"
+  body?: Record<string, string>
+  query?: Record<string, string>
   quotePath?: string
 }
 
@@ -67,7 +70,20 @@ export interface PricedAction {
 export interface Quote {
   amount: bigint
   ledgerId?: string
+  raw?: unknown
   tokenId?: string
+}
+
+export interface QuoteRequest {
+  action: string
+  params?: Record<string, string | number | bigint | boolean>
+  profile: HyperbalanceProfile
+}
+
+export interface QuoteAutoRequest {
+  action: string
+  params?: Record<string, string | number | bigint | boolean>
+  profile?: HyperbalanceProfile
 }
 
 export interface BalanceRequest {
