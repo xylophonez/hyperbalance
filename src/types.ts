@@ -112,6 +112,20 @@ export interface EnsureCreditRequest {
   transferAdapter: TokenTransferAdapter
 }
 
+export interface EnsureCreditAutoRequest {
+  ledgerId?: string
+  minimumBalance: bigint
+  profile?: HyperbalanceProfile
+  recipient: string
+  tokenId?: string
+  transferAdapter: TokenTransferAdapter
+}
+
+export interface FundingTarget {
+  ledger: LedgerDescriptor
+  token: TokenDescriptor
+}
+
 export interface FundingResult {
   after: Balance
   before: Balance
@@ -129,4 +143,3 @@ export interface ImportDepositRequest {
   token: TokenDescriptor
   transfer: TokenTransferResult
 }
-

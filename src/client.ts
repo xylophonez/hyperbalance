@@ -7,8 +7,10 @@ import type {
   Balance,
   BalanceRequest,
   DiscoveryOptions,
+  EnsureCreditAutoRequest,
   EnsureCreditRequest,
   FetchLike,
+  FundingTarget,
   FundingResult,
   HyperbalanceClientOptions,
   HyperbalanceProfile,
@@ -35,6 +37,14 @@ export class HyperbalanceClient {
     const response = await this.fetch(this.absoluteUrl(path), {
       headers: { accept: "application/json, text/plain" },
     })
+
+    if (response.status === 404) {
+      return {
+        address: request.address,
+        ledger,
+        value: 0n,
+      }
+    }
 
     if (!response.ok) {
       throw new Error(`Balance request failed: ${response.status} ${response.statusText}`)
@@ -117,6 +127,25 @@ export class HyperbalanceClient {
     }
   }
 
+  async ensureCreditAuto(request: EnsureCreditAutoRequest): Promise<FundingResult> {
+    const profile = request.profile ?? (await this.discover())
+    const targetOptions: { ledgerId?: string; tokenId?: string; transferKind?: string } = {
+      transferKind: request.transferAdapter.kind,
+    }
+    if (request.ledgerId !== undefined) targetOptions.ledgerId = request.ledgerId
+    if (request.tokenId !== undefined) targetOptions.tokenId = request.tokenId
+    const { ledger, token } = selectFundingTarget(profile, targetOptions)
+
+    return this.ensureCredit({
+      ledgerId: ledger.id,
+      minimumBalance: request.minimumBalance,
+      profile,
+      recipient: request.recipient,
+      tokenId: token.id,
+      transferAdapter: request.transferAdapter,
+    })
+  }
+
   async importDeposit(request: ImportDepositRequest): Promise<unknown> {
     const descriptor = request.token.import
     if (!descriptor) {
@@ -167,5 +196,32 @@ export class HyperbalanceClient {
   private absoluteUrl(pathOrUrl: string): string {
     if (/^https?:\/\//.test(pathOrUrl)) return pathOrUrl
     return `${this.nodeUrl}${pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`}`
+  }
+}
+
+export function selectFundingTarget(
+  profile: HyperbalanceProfile,
+  options: { ledgerId?: string; tokenId?: string; transferKind?: string } = {},
+): FundingTarget {
+  const token = options.tokenId
+    ? getToken(profile, options.tokenId)
+    : profile.tokens.find(
+        (candidate) =>
+          (!options.transferKind || candidate.transfer?.kind === options.transferKind) &&
+          (!options.ledgerId || candidate.ledgerId === options.ledgerId),
+      )
+
+  if (!token) {
+    throw new Error("No matching funding token found in payment profile")
+  }
+
+  const ledgerId = options.ledgerId ?? token.ledgerId
+  if (!ledgerId) {
+    throw new Error(`Funding token does not specify a ledger: ${token.id}`)
+  }
+
+  return {
+    ledger: getLedger(profile, ledgerId),
+    token,
   }
 }

@@ -1,4 +1,5 @@
 export { HyperbalanceClient } from "./client.js"
+export { selectFundingTarget } from "./client.js"
 export {
   DEFAULT_DISCOVERY_PATHS,
   discoverPaymentProfile,
@@ -13,8 +14,11 @@ export type {
   Balance,
   BalanceRequest,
   DiscoveryOptions,
+  EnsureCreditAutoRequest,
+  EnsureCreditRequest,
   FetchLike,
   FundingResult,
+  FundingTarget,
   HyperbalanceClientOptions,
   HyperbalanceProfile,
   ImportDepositRequest,
@@ -28,4 +32,3 @@ export type {
   TokenTransferRequest,
   TokenTransferResult,
 } from "./types.js"
-
