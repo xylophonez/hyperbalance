@@ -129,7 +129,7 @@ Example response:
   "pricing": [
     {
       "action": "hyperbeam-upload",
-      "quotePath": "/~hyperbalance@1.0/quote/hyperbeam-upload?bytes={bytes}"
+      "quotePath": "/payments/quote/hyperbeam-upload?bytes={bytes}"
     }
   ]
 }
