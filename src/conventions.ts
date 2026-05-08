@@ -45,7 +45,7 @@ export async function discoverHyperbeamAoBundlerProfile(
           amount: "{bytes}",
           resource: "arweave-bytes",
         },
-        quotePath: "/~metering@1.0/quote",
+        quotePath: "/~arweave-byte-pricing@1.0/quote",
       },
     ],
     tokens: [

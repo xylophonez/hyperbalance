@@ -8,7 +8,7 @@ is required. The library uses the routes HyperBEAM already exposes:
 
 ```text
 /~meta@1.0/info/address
-/~metering@1.0/quote?resource=arweave-bytes&amount={bytes}
+/~arweave-byte-pricing@1.0/quote?resource=arweave-bytes&amount={bytes}
 /ledger~node-process@1.0/now/balance/{address}
 /~ao-payment@1.0/ingest
 ```
@@ -97,7 +97,7 @@ The caller should normally provide:
 The node provides:
 
 - deposit address via `/~meta@1.0/info/address`,
-- upload price via `metering@1.0`,
+- upload price via `arweave-byte-pricing@1.0`,
 - balances via the local `ledger~node-process@1.0`,
 - deposit import via `ao-payment@1.0`.
 
