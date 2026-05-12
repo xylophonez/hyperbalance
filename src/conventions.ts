@@ -22,7 +22,18 @@ export async function discoverHyperbeamAoBundlerProfile(
   const ledgerId = options.ledgerId ?? HYPERBEAM_DEFAULT_LEDGER_ID
   const ledgerRoute = options.ledgerRoute ?? HYPERBEAM_DEFAULT_LEDGER_ROUTE
   const tokenId = options.tokenId ?? DEFAULT_AO_TOKEN_ID
-  const depositAddress = await fetchHyperbeamOperatorAddress(fetcher, nodeUrl)
+  const operator = await fetchRequiredHyperbeamText(
+    fetcher,
+    nodeUrl,
+    "/~meta@1.0/info/address",
+    "operator address",
+  )
+  const depositAddress =
+    (await fetchOptionalHyperbeamText(
+      fetcher,
+      nodeUrl,
+      "/~meta@1.0/info/ao-payment-deposit-address",
+    )) ?? operator
 
   return {
     ledgers: [
@@ -35,7 +46,7 @@ export async function discoverHyperbeamAoBundlerProfile(
       },
     ],
     node: {
-      operator: depositAddress,
+      operator,
       url: nodeUrl,
     },
     pricing: [
@@ -83,19 +94,40 @@ export async function discoverHyperbeamAoBundlerProfile(
   }
 }
 
-async function fetchHyperbeamOperatorAddress(fetcher: FetchLike, nodeUrl: string): Promise<string> {
-  const response = await fetcher(`${nodeUrl}/~meta@1.0/info/address`, {
+async function fetchRequiredHyperbeamText(
+  fetcher: FetchLike,
+  nodeUrl: string,
+  path: string,
+  label: string,
+): Promise<string> {
+  const response = await fetcher(`${nodeUrl}${path}`, {
     headers: { accept: "text/plain" },
   })
 
   if (!response.ok) {
-    throw new Error(`HyperBEAM operator address request failed: ${response.status} ${response.statusText}`)
+    throw new Error(`HyperBEAM ${label} request failed: ${response.status} ${response.statusText}`)
   }
 
-  const address = (await response.text()).trim()
-  if (!address) {
-    throw new Error("HyperBEAM operator address response was empty")
+  const value = (await response.text()).trim()
+  if (!value) {
+    throw new Error(`HyperBEAM ${label} response was empty`)
   }
 
-  return address
+  return value
+}
+
+async function fetchOptionalHyperbeamText(
+  fetcher: FetchLike,
+  nodeUrl: string,
+  path: string,
+): Promise<string | undefined> {
+  const response = await fetcher(`${nodeUrl}${path}`, {
+    headers: { accept: "text/plain" },
+  })
+
+  if (!response.ok) {
+    return undefined
+  }
+
+  return (await response.text()).trim() || undefined
 }

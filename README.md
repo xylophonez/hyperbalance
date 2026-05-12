@@ -8,6 +8,7 @@ is required. The library uses the routes HyperBEAM already exposes:
 
 ```text
 /~meta@1.0/info/address
+/~meta@1.0/info/ao-payment-deposit-address
 /~arweave-byte-pricing@1.0/quote?resource=arweave-bytes&amount={bytes}
 /ledger~node-process@1.0/now/balance/{address}
 /~ao-payment@1.0/ingest
@@ -19,7 +20,7 @@ Client tools can then:
 2. quote the intended request,
 3. check the payer's local ledger balance,
 4. calculate the shortfall,
-5. send AO to the node address,
+5. send AO to the advertised deposit address,
 6. import the verified AO deposit into the local ledger,
 7. re-check the spendable local balance.
 
@@ -96,7 +97,8 @@ The caller should normally provide:
 
 The node provides:
 
-- deposit address via `/~meta@1.0/info/address`,
+- operator address via `/~meta@1.0/info/address`,
+- deposit address via `/~meta@1.0/info/ao-payment-deposit-address`,
 - upload price via `arweave-byte-pricing@1.0`,
 - balances via the local `ledger~node-process@1.0`,
 - deposit import via `ao-payment@1.0`.
