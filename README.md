@@ -148,6 +148,14 @@ fund/import mode by default; pass `--execute` only when explicitly testing the
 JS signed-request transport against P4. The validated rb execution smoke path is
 currently the HyperBEAM-native signer script in `mystical.computer`.
 
+For a prefilled edit-and-run playground that does the full rb flow from one
+Node entrypoint, including the Ruby "first five words" transform, use:
+
+```sh
+npm run build
+node examples/rb-whisper-ruby-playground.mjs --verbose
+```
+
 ## Constants vs Inference
 
 The caller should normally provide:
