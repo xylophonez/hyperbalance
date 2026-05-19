@@ -9,8 +9,10 @@ is required. The library uses the routes HyperBEAM already exposes:
 ```text
 /~meta@1.0/info/address
 /~meta@1.0/info/ao-payment-deposit-address
+/~meta@1.0/info/ao-payment-ledger
 /~arweave-byte-pricing@1.0/quote?resource=arweave-bytes&amount={bytes}
 /ledger~node-process@1.0/now/balance/{address}
+/~p4@1.0/balance?target={address}
 /~ao-payment@1.0/ingest
 ```
 
@@ -140,6 +142,10 @@ For quoted routes, pass `quote` instead of, or in addition to, an explicit
 `minimumBalance`. For post-priced metered routes such as media ingest, use the
 same work-unit estimate the node will meter, for example input byte length.
 
+See [`examples/pay-rb-whisper.mjs`](examples/pay-rb-whisper.mjs) for a live
+script that funds AO into `rb.mystical.computer` when needed, then calls the
+metered `whisper@1.0` route with a signed request.
+
 ## Constants vs Inference
 
 The caller should normally provide:
@@ -154,7 +160,8 @@ The node provides:
 - operator address via `/~meta@1.0/info/address`,
 - deposit address via `/~meta@1.0/info/ao-payment-deposit-address`,
 - upload price via `arweave-byte-pricing@1.0`,
-- balances via the local `ledger~node-process@1.0`,
+- balances via the local `ledger~node-process@1.0`, or `~p4@1.0` when the
+  node advertises a service-overlay AO payment ledger,
 - deposit import via `ao-payment@1.0`.
 
 The library should not hardcode:

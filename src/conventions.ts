@@ -19,8 +19,6 @@ export async function discoverHyperbeamAoBundlerProfile(
 ): Promise<HyperbalanceProfile> {
   const fetcher = options.fetch ?? globalThis.fetch
   const nodeUrl = normalizeNodeUrl(options.nodeUrl)
-  const ledgerId = options.ledgerId ?? HYPERBEAM_DEFAULT_LEDGER_ID
-  const ledgerRoute = options.ledgerRoute ?? HYPERBEAM_DEFAULT_LEDGER_ROUTE
   const tokenId = options.tokenId ?? DEFAULT_AO_TOKEN_ID
   const operator = await fetchRequiredHyperbeamText(
     fetcher,
@@ -34,11 +32,22 @@ export async function discoverHyperbeamAoBundlerProfile(
       nodeUrl,
       "/~meta@1.0/info/ao-payment-deposit-address",
     )) ?? operator
+  const advertisedLedgerId = await fetchOptionalHyperbeamText(
+    fetcher,
+    nodeUrl,
+    "/~meta@1.0/info/ao-payment-ledger",
+  )
+  const ledgerId = options.ledgerId ?? advertisedLedgerId ?? HYPERBEAM_DEFAULT_LEDGER_ID
+  const ledgerRoute = options.ledgerRoute ?? HYPERBEAM_DEFAULT_LEDGER_ROUTE
+  const balancePath =
+    options.ledgerRoute === undefined && advertisedLedgerId
+      ? "/~p4@1.0/balance?target={address}"
+      : `${ledgerRoute}/now/balance/{address}`
 
   return {
     ledgers: [
       {
-        balancePath: `${ledgerRoute}/now/balance/{address}`,
+        balancePath,
         id: ledgerId,
         route: ledgerRoute,
         type: "process-ledger@1.0",
@@ -68,6 +77,7 @@ export async function discoverHyperbeamAoBundlerProfile(
           method: "POST",
           path: "/~ao-payment@1.0/ingest",
           query: {
+            ledger: "{ledgerId}",
             "message-id": "{messageId}",
             quantity: "{quantity}",
             recipient: "{recipient}",
@@ -86,6 +96,7 @@ export async function discoverHyperbeamAoBundlerProfile(
             Action: "Transfer",
             Quantity: "{quantity}",
             Recipient: "{depositAddress}",
+            "X-HB-Recipient": "{recipient}",
           },
         },
       },

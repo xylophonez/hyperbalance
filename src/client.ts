@@ -288,7 +288,9 @@ export class HyperbalanceClient {
     const response = await this.fetch(url, init)
 
     if (!response.ok) {
-      throw new Error(`Deposit import failed: ${response.status} ${response.statusText}`)
+      const body = (await response.text().catch(() => "")).trim()
+      const details = body ? `: ${body}` : ""
+      throw new Error(`Deposit import failed: ${response.status} ${response.statusText}${details}`)
     }
 
     const text = await response.text()
