@@ -31,7 +31,7 @@ Client tools can then:
 Install from npm:
 
 ```sh
-npm install hyperbalance
+npm install @permaweb/hyperbalance
 ```
 
 ## Basic Usage
@@ -43,7 +43,7 @@ import {
   HYPERBEAM_DEFAULT_LEDGER_ID,
   HyperbalanceClient,
   discoverHyperbeamAoBundlerProfile,
-} from "hyperbalance"
+} from "@permaweb/hyperbalance"
 
 const client = new HyperbalanceClient({
   nodeUrl: "https://hyperbeam.example.com",
@@ -110,7 +110,7 @@ import {
   HyperbalanceClient,
   arweaveAddressFromJwk,
   createAoCoreRequestSender,
-} from "hyperbalance"
+} from "@permaweb/hyperbalance"
 
 const nodeUrl = "https://hyperbeam.example.com"
 const wallet = JSON.parse(process.env.ARWEAVE_WALLET_JSON!)
