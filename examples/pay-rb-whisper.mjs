@@ -55,6 +55,10 @@ const stateUrl = trimTrailingSlash(args.stateUrl ?? process.env.AO_STATE_URL ?? 
 const pollMs = Number(args.pollMs ?? process.env.AO_POLL_MS ?? 5000)
 const timeoutMs = Number(args.timeoutMs ?? process.env.AO_TIMEOUT_MS ?? 360000)
 const fundingMargin = BigInt(args.fundingMargin ?? process.env.FUNDING_MARGIN ?? 0)
+const execute =
+  args.execute === "true" ||
+  args.execute === true ||
+  process.env.EXECUTE_WHISPER_REQUEST === "1"
 const verbose = args.verbose === "true" || args.verbose === true || process.env.VERBOSE === "1"
 
 const wallet = JSON.parse(await readFile(walletPath, "utf8"))
@@ -118,6 +122,43 @@ const transferAdapter = new AoTokenTransferAdapter({
     return slot
   },
 })
+
+if (!execute) {
+  const funding = await client.ensureCreditAuto({
+    minimumBalance,
+    profile,
+    recipient: signerAddress,
+    tokenId: args.tokenId ?? process.env.AO_TOKEN_ID ?? DEFAULT_AO_TOKEN_ID,
+    transferAdapter,
+  })
+
+  console.log(
+    JSON.stringify(
+      {
+        afterBalance: funding.after.value.toString(),
+        beforeBalance: funding.before.value.toString(),
+        funded: funding.transfer
+          ? {
+              after: funding.after.value.toString(),
+              before: funding.before.value.toString(),
+              messageId: funding.transfer.messageId,
+              shortfall: funding.shortfall.toString(),
+              slot: funding.transfer.slot,
+            }
+          : undefined,
+        inputBytes,
+        minimumBalance: minimumBalance.toString(),
+        nodeUrl,
+        signerAddress,
+        status: "funded",
+        tx,
+      },
+      undefined,
+      2,
+    ),
+  )
+  process.exit(0)
+}
 
 const { request } = connect({
   MODE: "mainnet",
@@ -243,7 +284,8 @@ function printHelp() {
   console.log(`Usage: node examples/pay-rb-whisper.mjs [options]
 
 Pays AO into rb.mystical.computer's local ledger when needed, then sends a
-signed HyperBEAM httpsig request to whisper@1.0.
+signed HyperBEAM httpsig request to whisper@1.0 when --execute is supplied.
+Without --execute it only funds/imports the caller's AO credit.
 
 Options:
   --wallet <path>            Arweave JWK path (default: ~/.aos.json)
@@ -253,6 +295,7 @@ Options:
   --language <code>          Whisper language (default: ${DEFAULT_LANGUAGE})
   --minimumBalance <amount>  AO base units to require before call
   --fundingMargin <amount>   Extra AO base units to fund above input bytes
+  --execute                  Also send the experimental JS-signed Whisper request
   --tokenId <id>             AO token process id
   --stateUrl <url>           AO state endpoint (default: https://state.forward.computer)
   --pollMs <ms>              AO schedule polling interval (default: 5000)
@@ -261,6 +304,7 @@ Options:
 
 Environment equivalents: HB_NODE, WHISPER_TX, WHISPER_GATEWAY,
 WHISPER_LANGUAGE, ARWEAVE_WALLET, PATH_TO_WALLET, AO_TOKEN_ID, AO_STATE_URL,
-AO_POLL_MS, AO_TIMEOUT_MS, FUNDING_MARGIN, VERBOSE=1.
+AO_POLL_MS, AO_TIMEOUT_MS, FUNDING_MARGIN, EXECUTE_WHISPER_REQUEST=1,
+VERBOSE=1.
 `)
 }

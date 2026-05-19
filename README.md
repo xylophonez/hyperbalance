@@ -142,9 +142,11 @@ For quoted routes, pass `quote` instead of, or in addition to, an explicit
 `minimumBalance`. For post-priced metered routes such as media ingest, use the
 same work-unit estimate the node will meter, for example input byte length.
 
-See [`examples/pay-rb-whisper.mjs`](examples/pay-rb-whisper.mjs) for a live
-script that funds AO into `rb.mystical.computer` when needed, then calls the
-metered `whisper@1.0` route with a signed request.
+See [`examples/pay-rb-whisper.mjs`](examples/pay-rb-whisper.mjs) for a live rb
+script that funds AO into `rb.mystical.computer` when needed. It runs in
+fund/import mode by default; pass `--execute` only when explicitly testing the
+JS signed-request transport against P4. The validated rb execution smoke path is
+currently the HyperBEAM-native signer script in `mystical.computer`.
 
 ## Constants vs Inference
 
