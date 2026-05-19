@@ -15,6 +15,9 @@ import type {
   HyperbalanceClientOptions,
   HyperbalanceProfile,
   ImportDepositRequest,
+  PaidRequest,
+  PaidRequestQuote,
+  PaidRequestResult,
   Quote,
   QuoteAutoRequest,
   QuoteRequest,
@@ -191,6 +194,66 @@ export class HyperbalanceClient {
     return this.quote(quoteRequest)
   }
 
+  async paidRequest(request: PaidRequest): Promise<PaidRequestResult> {
+    const profile = request.profile ?? (await this.discover())
+    const targetOptions: { ledgerId?: string; tokenId?: string; transferKind?: string } = {}
+    if (request.ledgerId !== undefined) targetOptions.ledgerId = request.ledgerId
+    if (request.tokenId !== undefined) targetOptions.tokenId = request.tokenId
+    if (request.transferAdapter !== undefined) targetOptions.transferKind = request.transferAdapter.kind
+    const { ledger, token } = selectFundingTarget(profile, targetOptions)
+
+    const quoted = request.quote ? await this.quote(buildQuoteRequest(profile, request.quote)) : undefined
+    const minimumBalance = maxBigint(request.minimumBalance ?? 0n, quoted?.amount ?? 0n)
+    let before = await this.getBalance({
+      address: request.signerAddress,
+      ledgerId: ledger.id,
+      profile,
+    })
+
+    let funding: FundingResult | undefined
+    if (before.value < minimumBalance) {
+      if (!request.transferAdapter) {
+        throw new PaymentRequiredError(
+          "Payment is required, but no transfer adapter was provided",
+          minimumBalance,
+          before.value,
+        )
+      }
+
+      funding = await this.ensureCredit({
+        ledgerId: ledger.id,
+        minimumBalance,
+        profile,
+        recipient: request.signerAddress,
+        tokenId: token.id,
+        transferAdapter: request.transferAdapter,
+      })
+      before = funding.after
+    }
+
+    const fields = { ...request.fields }
+    fields["signing-format"] ??= "httpsig"
+    const response = await request.send(fields)
+    const after =
+      request.readBalanceAfter === false
+        ? undefined
+        : await this.getBalance({
+            address: request.signerAddress,
+            ledgerId: ledger.id,
+            profile,
+          })
+
+    return {
+      ...(after !== undefined && { after }),
+      before,
+      ...(funding !== undefined && { funding }),
+      minimumBalance,
+      ...(quoted !== undefined && { quote: quoted }),
+      response,
+      signerAddress: request.signerAddress,
+    }
+  }
+
   async importDeposit(request: ImportDepositRequest): Promise<unknown> {
     const descriptor = request.token.import
     if (!descriptor) {
@@ -269,4 +332,17 @@ export function selectFundingTarget(
     ledger: getLedger(profile, ledgerId),
     token,
   }
+}
+
+function buildQuoteRequest(profile: HyperbalanceProfile, quote: PaidRequestQuote): QuoteRequest {
+  const request: QuoteRequest = {
+    action: quote.action,
+    profile,
+  }
+  if (quote.params !== undefined) request.params = quote.params
+  return request
+}
+
+function maxBigint(left: bigint, right: bigint): bigint {
+  return left > right ? left : right
 }

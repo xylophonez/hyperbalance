@@ -5,6 +5,31 @@ export interface HyperbalanceClientOptions {
   nodeUrl: string
 }
 
+export type HyperbeamSigningFormat = "httpsig" | "ans104"
+
+export type HyperbeamRequestValue =
+  | ArrayBuffer
+  | Blob
+  | Uint8Array
+  | bigint
+  | boolean
+  | number
+  | string
+  | undefined
+  | readonly HyperbeamRequestValue[]
+  | { readonly [key: string]: HyperbeamRequestValue }
+
+export interface HyperbeamSignedRequestFields {
+  path: string
+  method?: string
+  "signing-format"?: HyperbeamSigningFormat
+  [field: string]: HyperbeamRequestValue
+}
+
+export type SignedHyperbeamRequestSender = (
+  fields: HyperbeamSignedRequestFields,
+) => Promise<Response>
+
 export interface DiscoveryOptions {
   paths?: readonly string[]
 }
@@ -86,6 +111,11 @@ export interface QuoteAutoRequest {
   profile?: HyperbalanceProfile
 }
 
+export interface PaidRequestQuote {
+  action: string
+  params?: Record<string, string | number | bigint | boolean>
+}
+
 export interface BalanceRequest {
   address: string
   ledgerId: string
@@ -158,4 +188,27 @@ export interface ImportDepositRequest {
   sender?: string
   token: TokenDescriptor
   transfer: TokenTransferResult
+}
+
+export interface PaidRequest {
+  fields: HyperbeamSignedRequestFields
+  ledgerId?: string
+  minimumBalance?: bigint
+  profile?: HyperbalanceProfile
+  quote?: PaidRequestQuote
+  readBalanceAfter?: boolean
+  send: SignedHyperbeamRequestSender
+  signerAddress: string
+  tokenId?: string
+  transferAdapter?: TokenTransferAdapter
+}
+
+export interface PaidRequestResult {
+  after?: Balance
+  before: Balance
+  funding?: FundingResult
+  minimumBalance: bigint
+  quote?: Quote
+  response: Response
+  signerAddress: string
 }

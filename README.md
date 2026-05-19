@@ -86,6 +86,60 @@ await client.ensureCredit({
 })
 ```
 
+## Signed Paid Requests
+
+`hyperbalance` does not define a new paid-service wire standard. The reusable
+pattern is:
+
+- sign the service call as a normal HyperBEAM HTTP message, usually with
+  `httpsig@1.0`;
+- let the node's P4/service overlay identify the signer and charge its local
+  ledger;
+- use `hyperbalance` to discover the payment profile, check or fund the signer
+  balance, send the signed request, and optionally read the post-call balance.
+
+The current Permaweb request primitive for signed HyperBEAM calls is
+`@permaweb/ao-core-libs`:
+
+```ts
+import AOCore from "@permaweb/ao-core-libs"
+import { readFile } from "node:fs/promises"
+import {
+  HyperbalanceClient,
+  arweaveAddressFromJwk,
+  createAoCoreRequestSender,
+} from "hyperbalance"
+
+const nodeUrl = "https://hyperbeam.example.com"
+const wallet = JSON.parse(process.env.ARWEAVE_WALLET_JSON!)
+const signerAddress = await arweaveAddressFromJwk(wallet)
+const aoCore = AOCore.init({
+  jwk: wallet,
+  url: nodeUrl,
+})
+
+const client = new HyperbalanceClient({ nodeUrl })
+const audio = await readFile("/tmp/audio.wav")
+
+const result = await client.paidRequest({
+  fields: {
+    path: "/~whisper@1.0/transcribe",
+    method: "POST",
+    data: audio,
+  },
+  minimumBalance: BigInt(audio.byteLength),
+  send: createAoCoreRequestSender(aoCore),
+  signerAddress,
+})
+
+console.log(result.response.status)
+console.log(result.before.value, result.after?.value)
+```
+
+For quoted routes, pass `quote` instead of, or in addition to, an explicit
+`minimumBalance`. For post-priced metered routes such as media ingest, use the
+same work-unit estimate the node will meter, for example input byte length.
+
 ## Constants vs Inference
 
 The caller should normally provide:
