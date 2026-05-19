@@ -46,10 +46,13 @@
     "registry": "https://registry.npmjs.org/"
   },
   "sideEffects": false,
-  "devDependencies": {
-    "typescript": "^5.7.0"
+  "dependencies": {
+    "@permaweb/aoconnect": "^0.0.96"
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
   }
 }

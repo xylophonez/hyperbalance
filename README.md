@@ -145,8 +145,9 @@ same work-unit estimate the node will meter, for example input byte length.
 See [`examples/pay-rb-whisper.mjs`](examples/pay-rb-whisper.mjs) for a live rb
 script that funds AO into `rb.mystical.computer` when needed. It runs in
 fund/import mode by default; pass `--execute` only when explicitly testing the
-JS signed-request transport against P4. The validated rb execution smoke path is
-currently the HyperBEAM-native signer script in `mystical.computer`.
+JS signed-request transport against P4. The example is standalone and signs the
+HyperBEAM request with `@permaweb/aoconnect`; it does not require another local
+repository checkout.
 
 For a prefilled edit-and-run playground that does the full rb flow from one
 Node entrypoint, including the Ruby "first five words" transform, use:

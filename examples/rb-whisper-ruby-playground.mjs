@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process"
 import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
@@ -9,8 +8,7 @@ import { fileURLToPath } from "node:url"
 // Edit these defaults and rerun. CLI/env overrides are at the bottom.
 const CONFIG = {
   nodeUrl: "https://rb.mystical.computer",
-  walletPath: "/home/fn/Downloads/arweave-key-kaYP9bJtpqON8Kyy3RbqnqdtDBDUsPTQTNUCvZtKiFI.json",
-  mysticalRepo: "/home/fn/Dev/mystical.computer",
+  walletPath: "~/.aos.json",
   stateUrl: "https://state.forward.computer",
   pollMs: 5000,
   timeoutMs: 360000,
@@ -53,13 +51,16 @@ const {
   waitForAoAssignmentSlot,
 } = hyperbalance
 
-const { createDataItemSigner, message: aoMessage } = await import("@permaweb/aoconnect").catch(
-  (error) => {
-    throw new Error(
-      `Install @permaweb/aoconnect to run this example: npm install @permaweb/aoconnect\n${error.message}`,
-    )
-  },
-)
+const {
+  connect,
+  createDataItemSigner,
+  createSigner,
+  message: aoMessage,
+} = await import("@permaweb/aoconnect").catch((error) => {
+  throw new Error(
+    `Install dependencies with \`npm install\` before running this example.\n${error.message}`,
+  )
+})
 
 const nodeUrl = trimTrailingSlash(args.node ?? process.env.HB_NODE ?? CONFIG.nodeUrl)
 const sampleName = args.sample ?? process.env.WHISPER_SAMPLE ?? CONFIG.sample
@@ -72,7 +73,6 @@ const language = args.language ?? process.env.WHISPER_LANGUAGE ?? sample.languag
 const walletPath = expandHome(
   args.wallet ?? process.env.ARWEAVE_WALLET ?? process.env.PATH_TO_WALLET ?? CONFIG.walletPath,
 )
-const mysticalRepo = expandHome(args.mysticalRepo ?? process.env.MYSTICAL_REPO ?? CONFIG.mysticalRepo)
 const stateUrl = trimTrailingSlash(args.stateUrl ?? process.env.AO_STATE_URL ?? CONFIG.stateUrl)
 const pollMs = Number(args.pollMs ?? process.env.AO_POLL_MS ?? CONFIG.pollMs)
 const timeoutMs = Number(args.timeoutMs ?? process.env.AO_TIMEOUT_MS ?? CONFIG.timeoutMs)
@@ -101,16 +101,17 @@ const transferAdapter = buildAoTransferAdapter({
   verbose,
   wallet,
 })
-
-const funding = await client.ensureCreditAuto({
-  minimumBalance,
-  profile,
-  recipient: signerAddress,
-  tokenId,
-  transferAdapter,
-})
+const sendWhisperRequest = buildHyperbeamRequestSender({ nodeUrl, wallet })
 
 if (fundOnly) {
+  const funding = await client.ensureCreditAuto({
+    minimumBalance,
+    profile,
+    recipient: signerAddress,
+    tokenId,
+    transferAdapter,
+  })
+
   printJson({
     audioUrl,
     funding: summarizeFunding(funding),
@@ -124,13 +125,17 @@ if (fundOnly) {
   process.exit(0)
 }
 
-const whisper = runNativeWhisper({
+const { balance, funding, whisper } = await runWhisperRequest({
+  client,
   gateway,
   language,
-  mysticalRepo,
-  nodeUrl,
+  minimumBalance,
+  profile,
+  send: sendWhisperRequest,
+  signerAddress,
+  tokenId,
+  transferAdapter,
   tx,
-  walletPath,
 })
 const transcript = whisper.response?.transcript ?? ""
 const ruby = skipRuby
@@ -143,6 +148,7 @@ const ruby = skipRuby
 
 printJson({
   audioUrl,
+  balance,
   funding: summarizeFunding(funding),
   inputBytes,
   minimumBalance: minimumBalance.toString(),
@@ -185,6 +191,16 @@ function buildAoTransferAdapter({ pollMs, signerAddress, stateUrl, timeoutMs, ve
   })
 }
 
+function buildHyperbeamRequestSender({ nodeUrl, wallet }) {
+  const { request } = connect({
+    MODE: "mainnet",
+    URL: nodeUrl,
+    signer: createSigner(wallet),
+  })
+
+  return async (fields) => normalizeResponse(await request(fields))
+}
+
 async function fetchContentLength(url) {
   const head = await fetch(url, { method: "HEAD" }).catch(() => undefined)
   const length = head?.headers.get("content-length")
@@ -197,58 +213,58 @@ async function fetchContentLength(url) {
   return (await response.arrayBuffer()).byteLength
 }
 
-function runNativeWhisper({ gateway, language, mysticalRepo, nodeUrl, tx, walletPath }) {
-  const script = path.join(mysticalRepo, "scripts/rb-whisper-smoke.sh")
-  const result = spawnSync(script, {
-    cwd: mysticalRepo,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      HB_NODE: nodeUrl,
-      TX_ID: tx,
-      WALLET_FILE: walletPath,
-      WHISPER_GATEWAY: gateway,
-      WHISPER_LANGUAGE: language,
+async function runWhisperRequest({
+  client,
+  gateway,
+  language,
+  minimumBalance,
+  profile,
+  send,
+  signerAddress,
+  tokenId,
+  transferAdapter,
+  tx,
+}) {
+  const result = await client.paidRequest({
+    fields: {
+      accept: "application/json, text/plain",
+      gateway,
+      language,
+      method: "GET",
+      path: "/~whisper@1.0/transcribe",
+      tx,
     },
+    minimumBalance,
+    profile,
+    send,
+    signerAddress,
+    tokenId,
+    transferAdapter,
   })
 
-  if (result.error) throw result.error
-  if (result.status !== 0) {
+  const whisper = await parseWhisperResponse(result.response)
+  if (!result.response.ok) {
     throw new Error(
-      `Native Whisper smoke failed with exit ${result.status}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`,
+      `Whisper request failed: ${result.response.status} ${result.response.statusText}\n${whisper.body}`,
     )
   }
 
-  return parseWhisperSmokeOutput(result.stdout)
+  return {
+    balance: summarizePaidBalance(result),
+    funding: result.funding,
+    whisper,
+  }
 }
 
-function parseWhisperSmokeOutput(output) {
-  const parsed = {
-    raw: output.trim(),
+async function parseWhisperResponse(response) {
+  const body = await response.text()
+  return {
+    body,
+    contentType: response.headers.get("content-type") ?? undefined,
+    response: parseJson(body) ?? body,
+    status: response.status,
+    statusText: response.statusText,
   }
-  for (const line of output.split(/\r?\n/)) {
-    if (!line.trim()) continue
-    const equals = line.indexOf("=")
-    if (equals === -1) continue
-    const key = line.slice(0, equals)
-    const value = line.slice(equals + 1)
-    parsed[key] = value
-  }
-
-  if (parsed.status !== undefined) parsed.status = Number(parsed.status)
-  if (parsed.balance_before !== undefined) parsed.balanceBefore = Number(parsed.balance_before)
-  if (parsed.balance_after !== undefined) parsed.balanceAfter = Number(parsed.balance_after)
-  if (parsed.delta !== undefined) parsed.delta = Number(parsed.delta)
-  if (parsed.body) {
-    try {
-      parsed.response = JSON.parse(parsed.body)
-    } catch {
-      parsed.response = parsed.body
-    }
-  }
-  delete parsed.balance_before
-  delete parsed.balance_after
-  return parsed
 }
 
 async function transformTranscriptWithRuby({ nodeUrl, rubyCode, transcript }) {
@@ -274,6 +290,8 @@ async function transformTranscriptWithRuby({ nodeUrl, rubyCode, transcript }) {
 }
 
 function summarizeFunding(funding) {
+  if (!funding) return undefined
+
   return {
     after: funding.after.value.toString(),
     before: funding.before.value.toString(),
@@ -286,6 +304,36 @@ function summarizeFunding(funding) {
           slot: funding.transfer.slot,
         }
       : undefined,
+  }
+}
+
+function summarizePaidBalance(result) {
+  return {
+    after: result.after?.value.toString(),
+    before: result.before.value.toString(),
+  }
+}
+
+function normalizeResponse(value) {
+  if (value instanceof Response) return value
+  if (value?.headers && "body" in value) {
+    return new Response(value.body ?? "", {
+      headers: value.headers,
+      status: value.status ?? 200,
+      statusText: value.statusText,
+    })
+  }
+  return new Response(JSON.stringify(value ?? null), {
+    headers: { "content-type": "application/json" },
+    status: 200,
+  })
+}
+
+function parseJson(value) {
+  try {
+    return JSON.parse(value)
+  } catch {
+    return undefined
   }
 }
 
@@ -334,7 +382,7 @@ function printHelp() {
 Prefilled live rb paid Whisper playground:
   1. imports local Hyperbalance;
   2. funds/imports AO credit for the selected tx size;
-  3. runs the paid Whisper request through HyperBEAM's native signer;
+  3. sends a signed paid Whisper request with @permaweb/aoconnect;
   4. sends the transcript through the rb Ruby transform device.
 
 Options:
@@ -346,14 +394,13 @@ Options:
   --language <code>            Override the sample language
   --minimumBalance <amount>    AO base units to require before call
   --fundingMargin <amount>     Extra AO base units above input bytes
-  --mysticalRepo <path>        mystical.computer checkout path
   --fundOnly                   Only fund/import credit, do not call Whisper
   --skipRuby                   Do not call the Ruby transform step
   --verbose                    Print AO transfer progress to stderr
 
 Environment equivalents: HB_NODE, WHISPER_SAMPLE, WHISPER_TX, WHISPER_GATEWAY,
-WHISPER_LANGUAGE, ARWEAVE_WALLET, PATH_TO_WALLET, MYSTICAL_REPO, AO_TOKEN_ID,
-AO_STATE_URL, AO_POLL_MS, AO_TIMEOUT_MS, FUNDING_MARGIN, FUND_ONLY=1,
-SKIP_RUBY=1, VERBOSE=1.
+WHISPER_LANGUAGE, ARWEAVE_WALLET, PATH_TO_WALLET, AO_TOKEN_ID, AO_STATE_URL,
+AO_POLL_MS, AO_TIMEOUT_MS, FUNDING_MARGIN, FUND_ONLY=1, SKIP_RUBY=1,
+VERBOSE=1.
 `)
 }

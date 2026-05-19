@@ -20,9 +20,10 @@ that composes these pieces:
 
 `hyperbalance` now exposes that composition as `HyperbalanceClient.paidRequest`.
 The signed transport is deliberately injected as `send(fields)`. A production
-client should use a HyperBEAM-compatible `httpsig@1.0` request encoder; on rb,
-the currently validated live smoke path uses HyperBEAM's native signer while the
-JS request adapter is still being checked against P4.
+client should use a HyperBEAM-compatible `httpsig@1.0` request encoder. The rb
+examples use `@permaweb/aoconnect` for both AO token transfers and signed
+HyperBEAM requests, so they do not require a local HyperBEAM application repo
+checkout.
 
 For fixed-price or quotable routes, call `paidRequest` with `quote`. For dynamic
 media devices such as Whisper and FFmpeg, call it with `minimumBalance` based on
