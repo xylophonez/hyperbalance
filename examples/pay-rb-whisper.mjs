@@ -41,25 +41,45 @@ if (args.help) {
   process.exit(0)
 }
 
-const nodeUrl = trimTrailingSlash(args.node ?? process.env.HB_NODE ?? DEFAULT_NODE)
-const tx = args.tx ?? process.env.WHISPER_TX ?? DEFAULT_TX
-const gateway = trimTrailingSlash(args.gateway ?? process.env.WHISPER_GATEWAY ?? DEFAULT_GATEWAY)
+const nodeUrl = trimTrailingSlash(
+  args.node ?? envFirst("HYPERBALANCE_NODE_URL", "HB_NODE") ?? DEFAULT_NODE,
+)
+const tx = args.tx ?? process.env.WHISPER_TX ?? process.env.TX ?? DEFAULT_TX
+const gateway = trimTrailingSlash(
+  args.gateway ?? envFirst("HYPERBALANCE_GATEWAY_URL", "WHISPER_GATEWAY") ?? DEFAULT_GATEWAY,
+)
 const language = args.language ?? process.env.WHISPER_LANGUAGE ?? DEFAULT_LANGUAGE
 const walletPath = expandHome(
   args.wallet ??
+    process.env.HYPERBALANCE_WALLET ??
     process.env.ARWEAVE_WALLET ??
     process.env.PATH_TO_WALLET ??
+    process.env.WALLET ??
     path.join(homedir(), ".aos.json"),
 )
-const stateUrl = trimTrailingSlash(args.stateUrl ?? process.env.AO_STATE_URL ?? "https://state.forward.computer")
+const stateUrl = trimTrailingSlash(
+  args.stateUrl ??
+    envFirst("HYPERBALANCE_STATE_URL", "AO_STATE_URL") ??
+    "https://state.forward.computer",
+)
 const pollMs = Number(args.pollMs ?? process.env.AO_POLL_MS ?? 5000)
 const timeoutMs = Number(args.timeoutMs ?? process.env.AO_TIMEOUT_MS ?? 360000)
-const fundingMargin = BigInt(args.fundingMargin ?? process.env.FUNDING_MARGIN ?? 0)
+const fundingMargin = BigInt(
+  args.fundingMargin ?? envFirst("HYPERBALANCE_FUNDING_MARGIN", "FUNDING_MARGIN") ?? 0,
+)
 const execute =
   args.execute === "true" ||
   args.execute === true ||
-  process.env.EXECUTE_WHISPER_REQUEST === "1"
+  envFirst("HYPERBALANCE_EXECUTE", "EXECUTE_WHISPER_REQUEST") === "1"
 const verbose = args.verbose === "true" || args.verbose === true || process.env.VERBOSE === "1"
+const transferMode = String(
+  args.transferMode ?? envFirst("HYPERBALANCE_TRANSFER_MODE", "TRANSFER_MODE") ?? "ao",
+).toLowerCase()
+const mockMessageId =
+  args.mockMessageId ??
+  envFirst("HYPERBALANCE_MOCK_MESSAGE_ID", "MOCK_MESSAGE_ID") ??
+  "local-hyperbalance-payment"
+const mockSlot = args.mockSlot ?? envFirst("HYPERBALANCE_MOCK_SLOT", "MOCK_SLOT") ?? "1"
 
 const wallet = JSON.parse(await readFile(walletPath, "utf8"))
 const signerAddress = await arweaveAddressFromJwk(wallet)
@@ -67,7 +87,8 @@ const audioUrl = args.audioUrl ?? `${gateway}/${encodeURIComponent(tx)}`
 const inputBytes = await fetchContentLength(audioUrl)
 const minimumBalance =
   args.minimumBalance === undefined
-    ? BigInt(inputBytes) + fundingMargin
+    ? BigInt(envFirst("HYPERBALANCE_MINIMUM_BALANCE", "MINIMUM_BALANCE") ?? inputBytes) +
+      fundingMargin
     : BigInt(args.minimumBalance)
 
 const profile = await discoverHyperbeamAoBundlerProfile({
@@ -93,35 +114,7 @@ if (verbose) {
 }
 const client = new HyperbalanceClient({ nodeUrl })
 
-const dataItemSigner = createDataItemSigner(wallet)
-const transferAdapter = new AoTokenTransferAdapter({
-  async inferSender() {
-    return signerAddress
-  },
-  async message(input) {
-    if (verbose) console.error("Sending AO transfer", input.tags)
-    const messageId = await aoMessage({
-      data: input.data ?? "",
-      process: input.process,
-      signer: dataItemSigner,
-      tags: input.tags,
-    })
-    if (verbose) console.error(`AO transfer message id: ${messageId}`)
-    return messageId
-  },
-  async waitForAssignmentSlot(messageId, context) {
-    if (verbose) console.error(`Waiting for AO assignment slot for ${messageId}`)
-    const slot = await waitForAoAssignmentSlot({
-      messageId,
-      pollMs,
-      processId: context.processId,
-      stateUrl,
-      timeoutMs,
-    })
-    if (verbose) console.error(`AO assignment slot: ${slot}`)
-    return slot
-  },
-})
+const transferAdapter = buildTransferAdapter()
 
 if (!execute) {
   const funding = await client.ensureCreditAuto({
@@ -166,14 +159,16 @@ const { request } = connect({
   signer: createSigner(wallet),
 })
 
+const requestPath =
+  `/~whisper@1.0/transcribe?tx=${encodeURIComponent(tx)}` +
+  `&gateway=${encodeURIComponent(gateway)}` +
+  `&language=${encodeURIComponent(language)}`
+
 const result = await client.paidRequest({
   fields: {
     accept: "application/json, text/plain",
-    gateway,
-    language,
     method: "GET",
-    path: "/~whisper@1.0/transcribe",
-    tx,
+    path: requestPath,
   },
   minimumBalance,
   profile,
@@ -184,6 +179,10 @@ const result = await client.paidRequest({
 })
 
 const text = await result.response.text()
+if (!result.response.ok) {
+  throw new Error(`Paid request failed: ${result.response.status} ${result.response.statusText}\n${text}`)
+}
+
 let parsed
 try {
   parsed = JSON.parse(text)
@@ -245,6 +244,60 @@ function normalizeResponse(value) {
   })
 }
 
+function buildTransferAdapter() {
+  if (["local", "local-mock", "mock"].includes(transferMode)) {
+    return {
+      kind: "ao",
+      inferSender: async () => signerAddress,
+      transfer: async (request) => ({
+        messageId: mockMessageId,
+        raw: {
+          amount: request.amount.toString(),
+          depositAddress: request.depositAddress,
+          mode: transferMode,
+          recipient: request.recipient,
+        },
+        sender: request.sender ?? signerAddress,
+        slot: mockSlot,
+      }),
+    }
+  }
+
+  if (transferMode !== "ao") {
+    throw new Error(`Unsupported transfer mode: ${transferMode}`)
+  }
+
+  const dataItemSigner = createDataItemSigner(wallet)
+  return new AoTokenTransferAdapter({
+    async inferSender() {
+      return signerAddress
+    },
+    async message(input) {
+      if (verbose) console.error("Sending AO transfer", input.tags)
+      const messageId = await aoMessage({
+        data: input.data ?? "",
+        process: input.process,
+        signer: dataItemSigner,
+        tags: input.tags,
+      })
+      if (verbose) console.error(`AO transfer message id: ${messageId}`)
+      return messageId
+    },
+    async waitForAssignmentSlot(messageId, context) {
+      if (verbose) console.error(`Waiting for AO assignment slot for ${messageId}`)
+      const slot = await waitForAoAssignmentSlot({
+        messageId,
+        pollMs,
+        processId: context.processId,
+        stateUrl,
+        timeoutMs,
+      })
+      if (verbose) console.error(`AO assignment slot: ${slot}`)
+      return slot
+    },
+  })
+}
+
 function parseArgs(values) {
   const parsed = {}
   for (let index = 0; index < values.length; index += 1) {
@@ -280,6 +333,13 @@ function trimTrailingSlash(value) {
   return value.replace(/\/+$/, "")
 }
 
+function envFirst(...names) {
+  for (const name of names) {
+    if (process.env[name] !== undefined && process.env[name] !== "") return process.env[name]
+  }
+  return undefined
+}
+
 function printHelp() {
   console.log(`Usage: node examples/pay-rb-whisper.mjs [options]
 
@@ -297,14 +357,19 @@ Options:
   --fundingMargin <amount>   Extra AO base units to fund above input bytes
   --execute                  Also send the experimental JS-signed Whisper request
   --tokenId <id>             AO token process id
+  --transferMode <ao|mock>   Use real AO transfer or local mock transfer (default: ao)
   --stateUrl <url>           AO state endpoint (default: https://state.forward.computer)
   --pollMs <ms>              AO schedule polling interval (default: 5000)
   --timeoutMs <ms>           AO schedule wait timeout (default: 360000)
   --verbose                  Print funding progress to stderr
 
-Environment equivalents: HB_NODE, WHISPER_TX, WHISPER_GATEWAY,
-WHISPER_LANGUAGE, ARWEAVE_WALLET, PATH_TO_WALLET, AO_TOKEN_ID, AO_STATE_URL,
-AO_POLL_MS, AO_TIMEOUT_MS, FUNDING_MARGIN, EXECUTE_WHISPER_REQUEST=1,
-VERBOSE=1.
+Environment equivalents: HYPERBALANCE_NODE_URL, HB_NODE, WHISPER_TX, TX,
+HYPERBALANCE_GATEWAY_URL, WHISPER_GATEWAY, WHISPER_LANGUAGE,
+HYPERBALANCE_WALLET, ARWEAVE_WALLET, PATH_TO_WALLET, WALLET, AO_TOKEN_ID,
+HYPERBALANCE_STATE_URL, AO_STATE_URL, AO_POLL_MS, AO_TIMEOUT_MS,
+HYPERBALANCE_MINIMUM_BALANCE, MINIMUM_BALANCE, HYPERBALANCE_FUNDING_MARGIN,
+FUNDING_MARGIN, HYPERBALANCE_TRANSFER_MODE, TRANSFER_MODE,
+HYPERBALANCE_MOCK_MESSAGE_ID, MOCK_MESSAGE_ID, HYPERBALANCE_MOCK_SLOT,
+MOCK_SLOT, HYPERBALANCE_EXECUTE=1, EXECUTE_WHISPER_REQUEST=1, VERBOSE=1.
 `)
 }

@@ -145,17 +145,30 @@ same work-unit estimate the node will meter, for example input byte length.
 See [`examples/pay-rb-whisper.mjs`](examples/pay-rb-whisper.mjs) for a live rb
 script that funds AO into `rb.mystical.computer` when needed. It runs in
 fund/import mode by default; pass `--execute` only when explicitly testing the
-JS signed-request transport against P4. The example is standalone and signs the
-HyperBEAM request with `@permaweb/aoconnect`; it does not require another local
-repository checkout.
+JS signed-request transport against P4.
 
 For a prefilled edit-and-run playground that does the full rb flow from one
-Node entrypoint, including the Ruby "first five words" transform, use:
+Node entrypoint, including the Ruby "first five words" transform, use a local
+`mystical.computer` checkout for the native HyperBEAM smoke signer:
 
 ```sh
 npm run build
-node examples/rb-whisper-ruby-playground.mjs --verbose
+ARWEAVE_WALLET=/path/to/wallet.json node examples/rb-whisper-ruby-playground.mjs --verbose
 ```
+
+All rb examples can be pointed at a local node without editing source:
+
+```sh
+HYPERBALANCE_NODE_URL=http://127.0.0.1:8734 \
+HYPERBALANCE_GATEWAY_URL=http://127.0.0.1:9000 \
+HYPERBALANCE_STATE_URL=http://127.0.0.1:9000 \
+HYPERBALANCE_TRANSFER_MODE=mock \
+node examples/rb-whisper-ruby-playground.mjs
+```
+
+`HYPERBALANCE_TRANSFER_MODE=mock` is for local compliance tests only. It still
+exercises the node's AO payment import route, but expects the configured state
+endpoint to serve matching mock AO schedule/result data.
 
 ## Constants vs Inference
 

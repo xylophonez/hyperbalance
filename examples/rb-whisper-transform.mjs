@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process"
+import { request as httpRequest } from "node:http"
+import { request as httpsRequest } from "node:https"
 import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
@@ -60,23 +62,106 @@ await client.ensureCreditAuto({
   transferAdapter: buildTransferAdapter({ address, signer }),
 })
 
-const out = spawnSync(`${MYSTICAL}/scripts/rb-whisper-smoke.sh`, {
-  cwd: MYSTICAL,
-  encoding: "utf8",
-  env: {
-    ...process.env,
-    WALLET_FILE: WALLET,
-    TX_ID: TX,
-    HB_NODE: NODE,
-    WHISPER_GATEWAY: GATEWAY,
-    WHISPER_LANGUAGE: LANGUAGE,
-  },
-})
+const whisper = runWhisper()
+const transform = await countWordsWithRuby(whisper.response)
 
-if (out.status !== 0) throw new Error(out.error?.message || out.stderr || out.stdout)
-const body = out.stdout.match(/^body=(.*)$/m)?.[1]
-if (!body) throw new Error(`Whisper smoke output did not include a body:\n${out.stdout}`)
-console.log(String(parseJson(body)?.transcript ?? body).trim())
+console.log(
+  JSON.stringify(
+    {
+      tx: TX,
+      wordCount: transform.wordCount,
+      ruby: {
+        body: transform.body,
+        status: transform.status,
+      },
+      whisper: {
+        language: whisper.response.language,
+        status: whisper.status,
+        transcript: whisper.response.transcript,
+      },
+    },
+    undefined,
+    2,
+  ),
+)
+
+function runWhisper() {
+  const out = spawnSync(`${MYSTICAL}/scripts/rb-whisper-smoke.sh`, {
+    cwd: MYSTICAL,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      WALLET_FILE: WALLET,
+      TX_ID: TX,
+      HB_NODE: NODE,
+      WHISPER_GATEWAY: GATEWAY,
+      WHISPER_LANGUAGE: LANGUAGE,
+    },
+  })
+
+  if (out.status !== 0) throw new Error(out.error?.message || out.stderr || out.stdout)
+
+  const status = Number(out.stdout.match(/^status=(\d+)$/m)?.[1])
+  const body = out.stdout.match(/^body=(.*)$/m)?.[1]
+  if (!body) throw new Error(`Whisper smoke output did not include a body:\n${out.stdout}`)
+  if (status !== 200) throw new Error(`Whisper request failed: ${status}\n${body}`)
+
+  const response = parseJson(body)
+  if (!response?.transcript) throw new Error(`Whisper response did not include a transcript:\n${body}`)
+
+  return { body, response, status }
+}
+
+async function countWordsWithRuby(whisperResponse) {
+  const rubyCode =
+    'module AOProcess; def self.count_words(process,message,opts); t = process["transcript"] || message["transcript"] || ""; c = t.to_s.split.length; {"body" => c.to_s, "content-type" => "text/plain", "word-count" => c}; end; end'
+  const moduleMap = [
+    `body=:${Buffer.from(rubyCode).toString("base64")}:`,
+    `content-type=:${Buffer.from("application/ruby").toString("base64")}:`,
+  ].join(",")
+  const url = new URL("/~ruby@mruby-3.3a/count_words", NODE)
+  url.searchParams.set("module+map", moduleMap)
+  url.searchParams.set("transcript", whisperResponse.transcript)
+  if (whisperResponse.language) url.searchParams.set("language", whisperResponse.language)
+
+  const response = await freshTextGet(url, { accept: "text/plain", connection: "close" })
+  const body = response.body.trim()
+  if (!response.ok) {
+    throw new Error(`Ruby word-count transform failed: ${response.status} ${response.statusText}\n${body}`)
+  }
+
+  const wordCount = Number(body)
+  if (!Number.isInteger(wordCount)) {
+    throw new Error(`Ruby word-count transform returned a non-integer body:\n${body}`)
+  }
+
+  return {
+    body,
+    status: response.status,
+    wordCount,
+  }
+}
+
+function freshTextGet(url, headers) {
+  return new Promise((resolve, reject) => {
+    const transport = url.protocol === "https:" ? httpsRequest : httpRequest
+    const req = transport(url, { agent: false, headers, method: "GET" }, (res) => {
+      const chunks = []
+      res.on("data", (chunk) => chunks.push(chunk))
+      res.on("end", () => {
+        const status = res.statusCode ?? 0
+        resolve({
+          body: Buffer.concat(chunks).toString("utf8"),
+          ok: status >= 200 && status < 300,
+          status,
+          statusText: res.statusMessage ?? "",
+        })
+      })
+    })
+    req.on("error", reject)
+    req.end()
+  })
+}
 
 async function contentLength(url) {
   const head = await fetch(url, { method: "HEAD" }).catch(() => undefined)

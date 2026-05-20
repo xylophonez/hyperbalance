@@ -21,9 +21,24 @@ that composes these pieces:
 `hyperbalance` now exposes that composition as `HyperbalanceClient.paidRequest`.
 The signed transport is deliberately injected as `send(fields)`. A production
 client should use a HyperBEAM-compatible `httpsig@1.0` request encoder. The rb
-examples use `@permaweb/aoconnect` for both AO token transfers and signed
-HyperBEAM requests, so they do not require a local HyperBEAM application repo
-checkout.
+funding examples use `@permaweb/aoconnect` for AO token transfers. The rb
+Whisper execution examples currently use the native HyperBEAM smoke signer from
+the local `mystical.computer` checkout while the JS signed-request transport is
+validated against P4.
+
+For local endpoint compliance runs, the rb examples accept override environment
+variables:
+
+```sh
+HYPERBALANCE_NODE_URL=http://127.0.0.1:8734
+HYPERBALANCE_GATEWAY_URL=http://127.0.0.1:9000
+HYPERBALANCE_STATE_URL=http://127.0.0.1:9000
+HYPERBALANCE_TRANSFER_MODE=mock
+```
+
+The mock transfer mode returns a deterministic AO transfer id/slot and relies on
+the configured state endpoint to return matching schedule and result data for
+`ao-payment@1.0`.
 
 For fixed-price or quotable routes, call `paidRequest` with `quote`. For dynamic
 media devices such as Whisper and FFmpeg, call it with `minimumBalance` based on
