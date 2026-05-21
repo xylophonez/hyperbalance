@@ -1,10 +1,10 @@
-import { AoTokenTransferAdapter } from "hyperbalance/adapters/ao"
+import { AoTokenTransferAdapter } from "@permaweb/hyperbalance/adapters/ao"
 import {
   DEFAULT_AO_TOKEN_ID,
   HYPERBEAM_DEFAULT_LEDGER_ID,
   HyperbalanceClient,
   discoverHyperbeamAoBundlerProfile,
-} from "hyperbalance"
+} from "@permaweb/hyperbalance"
 
 const client = new HyperbalanceClient({
   nodeUrl: "https://hyperbeam.example.com",
