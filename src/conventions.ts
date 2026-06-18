@@ -3,6 +3,7 @@ import type { FetchLike, HyperbalanceProfile } from "./types.js"
 
 export const DEFAULT_AO_TOKEN_ID = "0syT13r0s0tgPmIed95bJnuSqaD29HQNN8D3ElLSrsc"
 export const HYPERBEAM_AO_BUNDLER_QUOTE_ACTION = "hyperbeam-upload"
+export const HYPERBEAM_BUNDLER_FREE_TIER_POLICY_ID = "bundler-free-tier"
 export const HYPERBEAM_DEFAULT_LEDGER_ID = "default"
 export const HYPERBEAM_DEFAULT_LEDGER_ROUTE = "/ledger~node-process@1.0"
 
@@ -66,6 +67,37 @@ export async function discoverHyperbeamAoBundlerProfile(
           resource: "arweave-bytes",
         },
         quotePath: "/~arweave-byte-pricing@1.0/quote",
+        quoteSemantics: {
+          authority: "advisory",
+          notes: [
+            "Zero quotes may be conditional on the node's bundler free-tier quota.",
+            "The quote endpoint does not reserve trundler quota; P4 prices the signed upload request.",
+          ],
+        },
+        settlement: {
+          device: "p4@1.0",
+          insufficientBalance: "http-402",
+          kind: "p4-ledger",
+          pricedPaths: ["/~bundler@1.0/item", "/~bundler@1.0/tx"],
+        },
+        subject: {
+          kind: "byte-count",
+          param: "bytes",
+          resource: "arweave-bytes",
+        },
+        zeroQuote: {
+          exhaustedBehavior: "charged",
+          kind: "conditional-free-tier",
+          limitParam: "bytes",
+          quota: {
+            device: "trundler@1.0",
+            identity: "signer-or-ip",
+            kind: "rate-limit",
+            policyId: HYPERBEAM_BUNDLER_FREE_TIER_POLICY_ID,
+          },
+          quoteConsumesQuota: false,
+          resource: "arweave-bytes",
+        },
       },
     ],
     tokens: [

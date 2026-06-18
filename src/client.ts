@@ -18,6 +18,7 @@ import type {
   PaidRequest,
   PaidRequestQuote,
   PaidRequestResult,
+  PricingDescriptor,
   Quote,
   QuoteAutoRequest,
   QuoteRequest,
@@ -182,7 +183,7 @@ export class HyperbalanceClient {
       throw new Error(`Quote request failed: ${response.status} ${response.statusText}`)
     }
 
-    return parseQuoteResponse(response)
+    return annotateQuote(await parseQuoteResponse(response), descriptor)
   }
 
   async quoteAuto(request: QuoteAutoRequest): Promise<Quote> {
@@ -343,6 +344,25 @@ function buildQuoteRequest(profile: HyperbalanceProfile, quote: PaidRequestQuote
   }
   if (quote.params !== undefined) request.params = quote.params
   return request
+}
+
+function annotateQuote(quote: Quote, descriptor: PricingDescriptor): Quote {
+  if (quote.amount !== 0n || descriptor.zeroQuote?.kind !== "conditional-free-tier") {
+    return quote
+  }
+
+  return {
+    ...quote,
+    advisories: [
+      ...(quote.advisories ?? []),
+      {
+        code: "conditional-free-tier",
+        message:
+          "Zero quote is conditional on the node's free-tier quota; the upload can still require payment if quota is exhausted.",
+        severity: "warning",
+      },
+    ],
+  }
 }
 
 function maxBigint(left: bigint, right: bigint): bigint {

@@ -69,7 +69,35 @@ const quote = await client.quote({
 })
 
 console.log(quote.amount)
+console.log(quote.advisories)
 ```
+
+## Bundler Free Tier And Trundler
+
+LapEE-style HyperBEAM bundlers can expose a free byte tier and use
+`trundler@1.0` to limit how often a signer or IP receives that free tier.
+`discoverHyperbeamAoBundlerProfile` keeps the quote route on
+`/~arweave-byte-pricing@1.0/quote`, and annotates the pricing descriptor with:
+
+- `subject`: the quoted input is an `arweave-bytes` byte count supplied as
+  `{bytes}`;
+- `settlement`: the real upload is settled by P4 on `/~bundler@1.0/item` and
+  `/~bundler@1.0/tx`, with insufficient balance surfaced as HTTP 402;
+- `zeroQuote`: a zero quote can be a conditional free-tier result backed by
+  `trundler@1.0`, and direct quote calls do not consume or reserve quota.
+
+When a zero quote is conditional, `client.quote` returns a warning advisory:
+
+```ts
+if (quote.advisories?.some((item) => item.code === "conditional-free-tier")) {
+  // The upload may still return HTTP 402 if server-side free-tier quota is gone.
+}
+```
+
+The bundler behavior is paid fallback, not hard block: when trundler quota is
+exhausted, the upload should be priced normally through P4. Client tools should
+therefore treat conditional zero quotes as "try without funding, but be ready to
+fund/retry on HTTP 402" rather than as an unconditional free guarantee.
 
 ## Funding
 

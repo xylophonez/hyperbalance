@@ -85,6 +85,44 @@ export interface PricingDescriptor {
   body?: Record<string, string>
   query?: Record<string, string>
   quotePath?: string
+  quoteSemantics?: PricingQuoteSemantics
+  settlement?: PricingSettlementDescriptor
+  subject?: PricingSubjectDescriptor
+  zeroQuote?: PricingZeroQuoteDescriptor
+}
+
+export interface PricingQuoteSemantics {
+  authority: "authoritative" | "advisory"
+  notes?: readonly string[]
+}
+
+export interface PricingSubjectDescriptor {
+  kind: "byte-count"
+  param: string
+  resource?: string
+}
+
+export interface PricingSettlementDescriptor {
+  device?: string
+  insufficientBalance?: "http-402"
+  kind: "p4-ledger"
+  pricedPaths?: readonly string[]
+}
+
+export interface PricingZeroQuoteDescriptor {
+  exhaustedBehavior: "charged" | "blocked"
+  kind: "conditional-free-tier" | "unconditional-free"
+  limitParam?: string
+  quota?: PricingQuotaDescriptor
+  quoteConsumesQuota?: boolean
+  resource?: string
+}
+
+export interface PricingQuotaDescriptor {
+  device: string
+  identity?: "ip" | "signer" | "signer-or-ip"
+  kind: "rate-limit"
+  policyId?: string
 }
 
 export interface PricedAction {
@@ -93,10 +131,17 @@ export interface PricedAction {
 }
 
 export interface Quote {
+  advisories?: QuoteAdvisory[]
   amount: bigint
   ledgerId?: string
   raw?: unknown
   tokenId?: string
+}
+
+export interface QuoteAdvisory {
+  code: "conditional-free-tier"
+  message: string
+  severity: "info" | "warning"
 }
 
 export interface QuoteRequest {
