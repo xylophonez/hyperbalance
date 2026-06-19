@@ -18,6 +18,10 @@ import type {
   PaidRequest,
   PaidRequestQuote,
   PaidRequestResult,
+  PreflightAutoRequest,
+  PreflightDecision,
+  PreflightQuote,
+  PreflightRequest,
   PricingDescriptor,
   Quote,
   QuoteAutoRequest,
@@ -195,6 +199,46 @@ export class HyperbalanceClient {
     return this.quote(quoteRequest)
   }
 
+  async preflight(request: PreflightRequest): Promise<PreflightQuote> {
+    const descriptor = request.profile.pricing?.find(
+      (candidate) => candidate.action === request.action,
+    )
+    const preflightPath = descriptor?.preflightPath ?? preflightPathFromQuotePath(descriptor)
+    if (!descriptor || !preflightPath) {
+      throw new Error(`No preflight path advertised for action: ${request.action}`)
+    }
+
+    const values = request.params ?? {}
+    const body = {
+      ...applyTemplateMap(descriptor.query, values),
+      request: request.request,
+    }
+    const response = await this.fetch(this.absoluteUrl(preflightPath), {
+      body: JSON.stringify(body, hyperbeamJsonReplacer),
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      method: "POST",
+    })
+
+    if (!response.ok) {
+      throw new Error(`Preflight request failed: ${response.status} ${response.statusText}`)
+    }
+
+    return annotatePreflight(await parsePreflightQuoteResponse(response), descriptor)
+  }
+
+  async preflightAuto(request: PreflightAutoRequest): Promise<PreflightQuote> {
+    const preflightRequest: PreflightRequest = {
+      action: request.action,
+      profile: request.profile ?? (await this.discover()),
+      request: request.request,
+    }
+    if (request.params !== undefined) preflightRequest.params = request.params
+    return this.preflight(preflightRequest)
+  }
+
   async paidRequest(request: PaidRequest): Promise<PaidRequestResult> {
     const profile = request.profile ?? (await this.discover())
     const targetOptions: { ledgerId?: string; tokenId?: string; transferKind?: string } = {}
@@ -363,6 +407,123 @@ function annotateQuote(quote: Quote, descriptor: PricingDescriptor): Quote {
       },
     ],
   }
+}
+
+async function parsePreflightQuoteResponse(response: Response): Promise<PreflightQuote> {
+  const contentType = response.headers.get("content-type") ?? ""
+  const rawText = await response.text()
+  const raw = parseMaybeJson(rawText, contentType)
+  const amount = parseRequiredBigint(
+    readField(raw, "amount") ?? response.headers.get("amount") ?? rawText.trim(),
+  )
+  const ledgerId = parseOptionalString(readField(raw, "ledgerId") ?? response.headers.get("ledgerId"))
+  const tokenId = parseOptionalString(readField(raw, "tokenId") ?? response.headers.get("tokenId"))
+  const decision = parseDecision(readField(raw, "decision") ?? response.headers.get("decision"))
+  const paymentRequired =
+    parseBoolean(readField(raw, "payment-required") ?? response.headers.get("payment-required")) ??
+    amount > 0n
+  const bytes = parseOptionalBigint(readField(raw, "bytes") ?? response.headers.get("bytes"))
+  const exhaustedBehavior = parseExhaustedBehavior(
+    readField(raw, "exhausted-behavior") ?? response.headers.get("exhausted-behavior"),
+  )
+
+  return {
+    amount,
+    ...(bytes !== undefined && { bytes }),
+    decision: decision ?? (amount === 0n ? "free" : "paid"),
+    ...(exhaustedBehavior !== undefined && { exhaustedBehavior }),
+    ...(ledgerId !== undefined && { ledgerId }),
+    paymentRequired,
+    raw: raw ?? rawText,
+    ...(tokenId !== undefined && { tokenId }),
+  }
+}
+
+function annotatePreflight(
+  quote: PreflightQuote,
+  descriptor: PricingDescriptor,
+): PreflightQuote {
+  if (quote.decision !== "free" || descriptor.zeroQuote?.kind !== "conditional-free-tier") {
+    return quote
+  }
+
+  return {
+    ...quote,
+    advisories: [
+      ...(quote.advisories ?? []),
+      {
+        code: "conditional-free-tier",
+        message:
+          "Free-tier eligibility was reserved for this exact request; retry with the same signed request or preflight again.",
+        severity: "info",
+      },
+    ],
+  }
+}
+
+function preflightPathFromQuotePath(descriptor: PricingDescriptor | undefined): string | undefined {
+  if (!descriptor?.quotePath?.endsWith("/quote")) return undefined
+  return `${descriptor.quotePath.slice(0, -"/quote".length)}/preflight`
+}
+
+function hyperbeamJsonReplacer(_key: string, value: unknown): unknown {
+  if (typeof value === "bigint") return value.toString()
+  if (value instanceof Uint8Array) return Array.from(value)
+  if (value instanceof ArrayBuffer) return Array.from(new Uint8Array(value))
+  return value
+}
+
+function readField(raw: unknown, key: string): unknown {
+  if (!raw || typeof raw !== "object") return undefined
+  return (raw as Record<string, unknown>)[key]
+}
+
+function parseDecision(value: unknown): PreflightDecision | undefined {
+  if (typeof value !== "string") return undefined
+  if (value === "free" || value === "paid" || value === "blocked" || value === "unknown") {
+    return value
+  }
+  return undefined
+}
+
+function parseBoolean(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value
+  if (typeof value === "string") {
+    if (value === "true") return true
+    if (value === "false") return false
+  }
+  return undefined
+}
+
+function parseOptionalBigint(value: unknown): bigint | undefined {
+  if (typeof value === "bigint") return value
+  if (typeof value === "number") return BigInt(value)
+  if (typeof value === "string" && value.trim()) return BigInt(value)
+  return undefined
+}
+
+function parseRequiredBigint(value: unknown): bigint {
+  const parsed = parseOptionalBigint(value)
+  if (parsed === undefined) throw new Error("Could not parse preflight amount response")
+  return parsed
+}
+
+function parseOptionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined
+}
+
+function parseMaybeJson(raw: string, contentType: string): unknown {
+  if (!contentType.includes("application/json")) return undefined
+  try {
+    return JSON.parse(raw) as unknown
+  } catch {
+    return undefined
+  }
+}
+
+function parseExhaustedBehavior(value: unknown): "charged" | "blocked" | undefined {
+  if (value === "charged" || value === "blocked") return value
+  return undefined
 }
 
 function maxBigint(left: bigint, right: bigint): bigint {

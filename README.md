@@ -76,28 +76,45 @@ console.log(quote.advisories)
 
 LapEE-style HyperBEAM bundlers can expose a free byte tier and use
 `trundler@1.0` to limit how often a signer or IP receives that free tier.
-`discoverHyperbeamAoBundlerProfile` keeps the quote route on
-`/~arweave-byte-pricing@1.0/quote`, and annotates the pricing descriptor with:
+`discoverHyperbeamAoBundlerProfile` keeps the amount-only quote route on
+`/~arweave-byte-pricing@1.0/quote`, adds exact-request preflight at
+`/~arweave-byte-pricing@1.0/preflight`, and annotates the pricing descriptor with:
 
 - `subject`: the quoted input is an `arweave-bytes` byte count supplied as
   `{bytes}`;
 - `settlement`: the real upload is settled by P4 on `/~bundler@1.0/item` and
   `/~bundler@1.0/tx`, with insufficient balance surfaced as HTTP 402;
 - `zeroQuote`: a zero quote can be a conditional free-tier result backed by
-  `trundler@1.0`, and direct quote calls do not consume or reserve quota.
+  `trundler@1.0`; amount-only quote calls do not consume quota, while preflight
+  consumes/reserves quota for the exact signed request.
 
-When a zero quote is conditional, `client.quote` returns a warning advisory:
+Amount-only quotes are conservative on trundler-aware nodes. If the node cannot
+prove that the exact request owns the next free slot, it returns the paid fallback
+amount so clients can fund the upload safely.
+
+For deterministic UX, call `client.preflight` after constructing the signed
+bundler upload request and before submitting it:
 
 ```ts
-if (quote.advisories?.some((item) => item.code === "conditional-free-tier")) {
-  // The upload may still return HTTP 402 if server-side free-tier quota is gone.
+const preflight = await client.preflight({
+  action: HYPERBEAM_AO_BUNDLER_QUOTE_ACTION,
+  profile,
+  params: { bytes: file.size },
+  request: signedUploadRequest,
+})
+
+if (preflight.decision === "free") {
+  // The node reserved free-tier eligibility for this exact signed request.
+}
+
+if (preflight.paymentRequired) {
+  // Fund at least preflight.amount before uploading.
 }
 ```
 
 The bundler behavior is paid fallback, not hard block: when trundler quota is
-exhausted, the upload should be priced normally through P4. Client tools should
-therefore treat conditional zero quotes as "try without funding, but be ready to
-fund/retry on HTTP 402" rather than as an unconditional free guarantee.
+exhausted, preflight returns `decision: "paid"` with the amount required for AO
+settlement.
 
 ## Funding
 

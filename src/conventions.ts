@@ -67,11 +67,12 @@ export async function discoverHyperbeamAoBundlerProfile(
           resource: "arweave-bytes",
         },
         quotePath: "/~arweave-byte-pricing@1.0/quote",
+        preflightPath: "/~arweave-byte-pricing@1.0/preflight",
         quoteSemantics: {
           authority: "advisory",
           notes: [
-            "Zero quotes may be conditional on the node's bundler free-tier quota.",
-            "The quote endpoint does not reserve trundler quota; P4 prices the signed upload request.",
+            "Amount-only quotes are a guaranteed paid fallback when free-tier quota is conditional.",
+            "Use the preflight path with the exact signed bundler request to reserve and display free-tier eligibility before upload.",
           ],
         },
         settlement: {
@@ -96,6 +97,7 @@ export async function discoverHyperbeamAoBundlerProfile(
             policyId: HYPERBEAM_BUNDLER_FREE_TIER_POLICY_ID,
           },
           quoteConsumesQuota: false,
+          preflightConsumesQuota: true,
           resource: "arweave-bytes",
         },
       },
