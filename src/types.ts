@@ -83,6 +83,7 @@ export interface PricingDescriptor {
   action: string
   method?: "GET" | "POST"
   body?: Record<string, string>
+  preflightPath?: string
   query?: Record<string, string>
   quotePath?: string
   quoteSemantics?: PricingQuoteSemantics
@@ -113,6 +114,7 @@ export interface PricingZeroQuoteDescriptor {
   exhaustedBehavior: "charged" | "blocked"
   kind: "conditional-free-tier" | "unconditional-free"
   limitParam?: string
+  preflightConsumesQuota?: boolean
   quota?: PricingQuotaDescriptor
   quoteConsumesQuota?: boolean
   resource?: string
@@ -138,6 +140,15 @@ export interface Quote {
   tokenId?: string
 }
 
+export type PreflightDecision = "free" | "paid" | "blocked" | "unknown"
+
+export interface PreflightQuote extends Quote {
+  bytes?: bigint
+  decision: PreflightDecision
+  exhaustedBehavior?: "charged" | "blocked"
+  paymentRequired: boolean
+}
+
 export interface QuoteAdvisory {
   code: "conditional-free-tier"
   message: string
@@ -150,10 +161,24 @@ export interface QuoteRequest {
   profile: HyperbalanceProfile
 }
 
+export interface PreflightRequest {
+  action: string
+  params?: Record<string, string | number | bigint | boolean>
+  profile: HyperbalanceProfile
+  request: HyperbeamSignedRequestFields
+}
+
 export interface QuoteAutoRequest {
   action: string
   params?: Record<string, string | number | bigint | boolean>
   profile?: HyperbalanceProfile
+}
+
+export interface PreflightAutoRequest {
+  action: string
+  params?: Record<string, string | number | bigint | boolean>
+  profile?: HyperbalanceProfile
+  request: HyperbeamSignedRequestFields
 }
 
 export interface PaidRequestQuote {
