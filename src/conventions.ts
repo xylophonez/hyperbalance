@@ -40,10 +40,18 @@ export async function discoverHyperbeamAoBundlerProfile(
   )
   const ledgerId = options.ledgerId ?? advertisedLedgerId ?? HYPERBEAM_DEFAULT_LEDGER_ID
   const ledgerRoute = options.ledgerRoute ?? HYPERBEAM_DEFAULT_LEDGER_ROUTE
-  const balancePath =
-    options.ledgerRoute === undefined && advertisedLedgerId
-      ? "/~p4@1.0/balance?target={address}"
-      : `${ledgerRoute}/now/balance/{address}`
+  const usesAggregatedP4Balance = options.ledgerRoute === undefined && Boolean(advertisedLedgerId)
+  const balancePath = usesAggregatedP4Balance
+    ? "/~p4@1.0/balance?target={address}"
+    : `${ledgerRoute}/now/balance/{address}`
+  // When the display balance is the aggregated p4 view (max of the waterfall's
+  // recharge and ao-payment ledgers), top-ups must be sized against the direct
+  // ao-payment ledger that deposits are imported into and that the fallback
+  // charges in full. Without this, funding the aggregate shortfall under-funds
+  // ao-payment and the charge still 402s.
+  const settlementBalancePath = usesAggregatedP4Balance
+    ? `${ledgerRoute}/now/balance/{address}`
+    : undefined
 
   return {
     ledgers: [
@@ -51,6 +59,7 @@ export async function discoverHyperbeamAoBundlerProfile(
         balancePath,
         id: ledgerId,
         route: ledgerRoute,
+        ...(settlementBalancePath !== undefined && { settlementBalancePath }),
         type: "process-ledger@1.0",
         unit: "AO",
       },

@@ -44,27 +44,10 @@ export class HyperbalanceClient {
 
   async getBalance(request: BalanceRequest): Promise<Balance> {
     const ledger = getLedger(request.profile, request.ledgerId)
-    const path = applyTemplate(ledger.balancePath, { address: request.address })
-    const response = await this.fetch(this.absoluteUrl(path), {
-      headers: { accept: "application/json, text/plain" },
-    })
-
-    if (response.status === 404) {
-      return {
-        address: request.address,
-        ledger,
-        value: 0n,
-      }
-    }
-
-    if (!response.ok) {
-      throw new Error(`Balance request failed: ${response.status} ${response.statusText}`)
-    }
-
     return {
       address: request.address,
       ledger,
-      value: await parseBalanceResponse(response),
+      value: await this.readBalanceValue(ledger.balancePath, request.address),
     }
   }
 
@@ -85,7 +68,26 @@ export class HyperbalanceClient {
       }
     }
 
-    const shortfall = request.minimumBalance - before.value
+    // Size the top-up against the ledger that settlement will actually charge,
+    // not the displayed balance. When the node reports an aggregated display
+    // balance (e.g. p4 reporting max(recharge-ledger, ao-payment) for a
+    // waterfall), the displayed balance can exceed the spendable balance of the
+    // fallback ledger that deposits are imported into. The waterfall fallback is
+    // non-additive — it must cover the full request from that ledger alone — so
+    // funding (minimum - displayed) under-funds it and the charge still 402s.
+    const settlementValue = ledger.settlementBalancePath
+      ? await this.readBalanceValue(ledger.settlementBalancePath, request.recipient)
+      : before.value
+
+    if (settlementValue >= request.minimumBalance) {
+      return {
+        after: before,
+        before,
+        shortfall: 0n,
+      }
+    }
+
+    const shortfall = request.minimumBalance - settlementValue
     const depositAddress = token.depositAddress ?? request.profile.node?.operator
     if (!depositAddress) {
       throw new PaymentRequiredError(
@@ -346,6 +348,21 @@ export class HyperbalanceClient {
     } catch {
       return text
     }
+  }
+
+  private async readBalanceValue(balancePath: string, address: string): Promise<bigint> {
+    const path = applyTemplate(balancePath, { address })
+    const response = await this.fetch(this.absoluteUrl(path), {
+      headers: { accept: "application/json, text/plain" },
+    })
+
+    if (response.status === 404) return 0n
+
+    if (!response.ok) {
+      throw new Error(`Balance request failed: ${response.status} ${response.statusText}`)
+    }
+
+    return parseBalanceResponse(response)
   }
 
   private absoluteUrl(pathOrUrl: string): string {
