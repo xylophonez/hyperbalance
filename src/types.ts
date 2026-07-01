@@ -51,6 +51,14 @@ export interface LedgerDescriptor {
   balancePath: string
   id: string
   route?: string
+  /**
+   * Balance path of the ledger that settlement actually charges and that deposit
+   * imports credit. Set this when `balancePath` reports an aggregated display
+   * balance (e.g. a p4 waterfall reporting `max(recharge-ledger, ao-payment)`):
+   * top-ups are sized against this ledger so the non-additive fallback can cover
+   * the full request. When absent, `balancePath` is used to size top-ups.
+   */
+  settlementBalancePath?: string
   type: string
   unit?: string
 }
