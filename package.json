@@ -1,6 +1,6 @@
 {
   "name": "@permaweb/hyperbalance",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Client helpers for funding AO-backed HyperBEAM local ledgers.",
   "type": "module",
   "main": "./dist/index.js",
